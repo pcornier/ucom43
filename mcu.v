@@ -197,6 +197,7 @@ always @*
     8'b00?1_0011: alu_a = dpl;
     8'b0010_00??,
     8'b0101_11??: alu_a = F;
+    8'b0101_00??: alu_a = i_ports[dpl[1:0]];
     default: alu_a = 4'b0;
   endcase
 
@@ -206,6 +207,7 @@ always @*
     8'b0001_0000: alu_b = 4'hf;
     8'b000?_100?: alu_b = mdat;
     8'b0101_1???,
+    8'b0101_00??,
     8'b0010_0???: alu_b = { 2'b0, rdat[1:0] };
     default: alu_b = 4'b0;
   endcase
@@ -225,6 +227,7 @@ always @*
     8'b0001_0011,
     8'b000?_1111: alu_op = 3'd3;
     8'b0001_?000: alu_op = 3'd4;
+    8'b0101_00??,
     8'b0101_1???,
     8'b0010_0???: alu_op = 3'd5;
     8'b0000_0110: alu_op = 3'd6;
@@ -431,6 +434,7 @@ always @(posedge clk)
           8'b001?_11??,
           8'b0101_10??,
           8'b0010_01??,
+          8'b0101_00??,
           8'b0101_11??: if (alu_carry) state <= SKP;
           8'b0010_00??: if (~alu_carry) state <= SKP;
           8'b0100_110?,
@@ -447,7 +451,6 @@ always @(posedge clk)
           8'b0100_1000,
           8'b0100_1001: state <= PRM;
           8'b0101_01??: if (prtAI[rdat[1:0]]) state <= SKP;
-          8'b0101_00??: if (i_ports[dpl[1:0]][rdat[1:0]]) state <= SKP;
           8'b0100_0001,
           8'b1010_0???,
           8'b0001_0101,
