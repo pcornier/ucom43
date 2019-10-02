@@ -175,7 +175,7 @@ always @* begin
     2: { alu_carry, alu_c } = alu_a + 4'b1;
     3: { alu_carry, alu_c } = alu_a - 4'b1;
     4: alu_c = alu_a ^ alu_b;
-    5: alu_carry = (alu_a & (4'b1 << alu_b[1:0])) != 4'b0;
+    5: alu_carry = alu_a[alu_b[1:0]];
     6: alu_c = alu_a + 4'd6;
     7: alu_c = alu_a + 4'd10;
   endcase
@@ -198,6 +198,7 @@ always @*
     8'b0010_00??,
     8'b0101_11??: alu_a = F;
     8'b0101_00??: alu_a = i_ports[dpl[1:0]];
+    8'b0101_01??: alu_a = prtAI;
     default: alu_a = 4'b0;
   endcase
 
@@ -208,6 +209,7 @@ always @*
     8'b000?_100?: alu_b = mdat;
     8'b0101_1???,
     8'b0101_00??,
+    8'b0101_01??,
     8'b0010_0???: alu_b = { 2'b0, rdat[1:0] };
     default: alu_b = 4'b0;
   endcase
@@ -228,6 +230,7 @@ always @*
     8'b000?_1111: alu_op = 3'd3;
     8'b0001_?000: alu_op = 3'd4;
     8'b0101_00??,
+    8'b0101_01??,
     8'b0101_1???,
     8'b0010_0???: alu_op = 3'd5;
     8'b0000_0110: alu_op = 3'd6;
@@ -235,7 +238,7 @@ always @*
     default: alu_op = 3'd0;
   endcase
 
-// waddr (ram write address)
+// ram write address
 always @(posedge clk)
   if (clk_en)
     casez (rdat)
@@ -329,7 +332,6 @@ always @(posedge clk)
           8'b0100_1110: dpl <= Y;
           8'b0000_0111: dpl <= acc;
           8'b0100_1100: dpl <= S;
-          default: dpl <= dpl;
         endcase
     endcase
 
@@ -433,6 +435,7 @@ always @(posedge clk)
           8'b00?1_0011,
           8'b001?_11??,
           8'b0101_10??,
+          8'b0101_01??,
           8'b0010_01??,
           8'b0101_00??,
           8'b0101_11??: if (alu_carry) state <= SKP;
@@ -450,7 +453,6 @@ always @(posedge clk)
           8'b1010_1???: state <= PRM;
           8'b0100_1000,
           8'b0100_1001: state <= PRM;
-          8'b0101_01??: if (prtAI[rdat[1:0]]) state <= SKP;
           8'b0100_0001,
           8'b1010_0???,
           8'b0001_0101,
