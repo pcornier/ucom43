@@ -28,6 +28,7 @@ assign i_ports[1] = prtBI;
 assign i_ports[2] = prtCI;
 assign i_ports[3] = prtDI;
 
+
 // output ports (ab unconnected)CDEFGHI
 reg [3:0] o_ports[8:0];
 
@@ -95,7 +96,7 @@ always @(posedge clk) begin
     bcount <= rdat[5:0];
     tm <= 1'b0;
   end
-  if (clk_en && ~tm) begin
+  if (~tm) begin
     if (pcount == 6'b111111)
       bcount <= bcount - 6'b1;
     pcount <= pcount + 6'b1;
@@ -136,7 +137,7 @@ wire [6:0] daddr      ; // decoded ram write address
 wire       sel        ;
 
 // ram address decoder
-assign sel = waddr <= 7'h79 ? 1'b0 : 1'b1;
+assign sel = waddr < 7'h79 ? 1'b0 : 1'b1;
 assign daddr = waddr[6] == 1'b1 ? (waddr & 7'b1011111) : waddr;
 
 always @(negedge clk)
@@ -148,17 +149,16 @@ always @(posedge clk)
     if (~sel)
       // write to ram
       if (bset[1])
-        if (bset[0]) ram[daddr] <= ram[daddr] | (4'b1 << din[1:0]);
-        else ram[daddr] <= ram[daddr] & ~(4'b1 << din[1:0]);
+        ram[daddr][din[1:0]] <= bset[0];
       else
         ram[daddr] <= din;
     else
       // write to registers
       if (bset[1])
-        if (bset[0]) wr[daddr[2:0]-1] <= wr[daddr[2:0]-1] | (4'b1 << din[1:0]);
-        else wr[daddr[2:0]-1] <= wr[daddr[2:0]-1] & ~(4'b1 << din[1:0]);
+        wr[daddr[2:0]-1][din[1:0]] <= bset[0];
       else
         wr[daddr[2:0]-1] <= din;
+
 
 // ALU
 reg [2:0] alu_op;
@@ -192,7 +192,7 @@ always @*
     8'b0000_0110,
     8'b0000_1010,
     8'b0010_01??: alu_a = acc;
-    8'b0001_0001: alu_a = acc ^ 4'hf;
+    8'b0001_0001: alu_a = ~acc;
     8'b001?_11??,
     8'b00?1_0011: alu_a = dpl;
     8'b0010_00??,
@@ -241,16 +241,17 @@ always @*
 // ram write address
 always @(posedge clk)
   if (clk_en)
-    casez (rdat)
-      8'b011?_11??: waddr <= F_REG;
-      8'b0100_1101: waddr <= R_REG;
-      8'b0100_1100: waddr <= S_REG;
-      8'b0100_?011: waddr <= W_REG;
-      8'b0100_?111: waddr <= X_REG;
-      8'b0100_?110: waddr <= Y_REG;
-      8'b0100_?010: waddr <= Z_REG;
-      default: waddr <= dp;
-    endcase
+    if (state == FTC)
+      casez (rdat)
+        8'b011?_11??: waddr <= F_REG;
+        8'b0100_1101: waddr <= R_REG;
+        8'b0100_1100: waddr <= S_REG;
+        8'b0100_?011: waddr <= W_REG;
+        8'b0100_?111: waddr <= X_REG;
+        8'b0100_?110: waddr <= Y_REG;
+        8'b0100_?010: waddr <= Z_REG;
+        default: waddr <= dp;
+      endcase
 
 
 // ram we
@@ -450,17 +451,18 @@ always @(posedge clk)
           8'b0000_0100: if (c) state <= SKP;
           8'b0000_0101: if (tm) state <= SKP;
           8'b0000_0011: if (irq) state <= SKP;
-          8'b1010_1???: state <= PRM;
-          8'b0100_1000,
-          8'b0100_1001: state <= PRM;
+          8'b1010_1???,
+          8'b0100_100?,
           8'b0100_0001,
           8'b1010_0???,
-          8'b0001_0101,
-          8'b0001_0110,
-          8'b0001_0111,
+          8'b0001_011?,
           8'b0001_1110,
-          8'b0001_0100:
-            state <= PRM;
+          8'b0001_0100: state <= PRM;
+          8'b0001_0101:
+            if (opc == 8'b0001_0101) // skip consecutive??
+              state <= SKP;
+            else
+              state <= PRM;
         endcase
       end
 
@@ -534,7 +536,8 @@ always @(posedge clk)
         casez (rdat)
           8'b0001_01?1,
           8'b0001_?110,
-          8'b1010_????,
+          8'b1010_0???,
+          8'b1010_1???,
           8'b0001_0100: pcc <= pcc + 8'd2;
           default: pcc <= pcc + 8'd1;
         endcase
@@ -555,6 +558,5 @@ always @(posedge clk)
 
   else if (reset)
     { pcf, pcc } <= 11'b0;
-
 
 endmodule
