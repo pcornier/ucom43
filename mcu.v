@@ -96,7 +96,7 @@ always @(posedge clk) begin
     bcount <= rdat[5:0];
     tm <= 1'b0;
   end
-  if (~tm) begin
+  else if (~tm) begin
     if (pcount == 6'b111111)
       bcount <= bcount - 6'b1;
     pcount <= pcount + 6'b1;
@@ -141,7 +141,7 @@ assign sel = waddr < 7'h79 ? 1'b0 : 1'b1;
 assign daddr = waddr[6] == 1'b1 ? (waddr & 7'b1011111) : waddr;
 
 always @(negedge clk)
-  mdat <= dp <= 7'h79 ? ram[dp[6] == 1'b1 ? dp & 7'b1011111 : dp] : wr[dp[2:0]];
+  mdat <= dp < 7'h79 ? ram[dp[6] == 1'b1 ? dp & 7'b1011111 : dp] : wr[dp[2:0]];
 
 // write ram & registers
 always @(posedge clk)
@@ -164,20 +164,20 @@ always @(posedge clk)
 reg [2:0] alu_op;
 reg [3:0] alu_a;
 reg [3:0] alu_b;
-reg [3:0] alu_c;
-reg alu_carry;
+reg [3:0] alu_r;
+reg alu_c;
 always @* begin
-  alu_carry = 1'b0;
-  alu_c = 4'b0;
+  alu_c = 1'b0;
+  alu_r = 4'b0;
   case (alu_op)
-    0: { alu_carry, alu_c } = alu_a + alu_b;
-    1: { alu_carry, alu_c } = alu_a + alu_b + { 3'b0, c };
-    2: { alu_carry, alu_c } = alu_a + 4'b1;
-    3: { alu_carry, alu_c } = alu_a - 4'b1;
-    4: alu_c = alu_a ^ alu_b;
-    5: alu_carry = alu_a[alu_b[1:0]];
-    6: alu_c = alu_a + 4'd6;
-    7: alu_c = alu_a + 4'd10;
+    0: { alu_c, alu_r } = alu_a + alu_b;
+    1: { alu_c, alu_r } = alu_a + alu_b + { 3'b0, c };
+    2: { alu_c, alu_r } = alu_a + 4'b1;
+    3: { alu_c, alu_r } = alu_a - 4'b1;
+    4: alu_r = alu_a ^ alu_b;
+    5: alu_c = alu_a[alu_b[1:0]];
+    6: alu_r = alu_a + 4'd6;
+    7: alu_r = alu_a + 4'd10;
   endcase
 end
 
@@ -210,7 +210,7 @@ always @*
     8'b0101_1???,
     8'b0101_00??,
     8'b0101_01??,
-    8'b0010_0???: alu_b = { 2'b0, rdat[1:0] };
+    8'b0010_0???: alu_b = rdat[3:0];
     default: alu_b = 4'b0;
   endcase
 
@@ -279,7 +279,7 @@ always @(posedge clk)
   if (clk_en)
     casez	(rdat)
       8'b0001_1101,
-      8'b0001_1111: din <= alu_c;
+      8'b0001_1111: din <= alu_r;
       8'b0000_0010,
       8'b0010_10??,
       8'b001?_11??,
@@ -328,7 +328,7 @@ always @(posedge clk)
       FTC:
         casez (rdat)
           8'b001?_11??,
-          8'b00?1_0011: dpl <= alu_c;
+          8'b00?1_0011: dpl <= alu_r;
           8'b1000_????: dpl <= rdat[3:0];
           8'b0100_1110: dpl <= Y;
           8'b0000_0111: dpl <= acc;
@@ -349,15 +349,12 @@ always @(posedge clk)
           8'b0000_11?1,
           8'b0000_0110,
           8'b0000_1010,
-          8'b0001_1000: acc <= alu_c;
+          8'b0001_1000: acc <= alu_r;
           8'b0001_1011: c <= 1;
           8'b0001_1010: { c, cs } <= { cs, c };
           8'b0011_0000: { acc, c } <= { c, acc };
-          8'b0000_1000: acc <= alu_c;
-          8'b000?_1001: begin
-            acc <= alu_c;
-            c <= alu_carry;
-          end
+          8'b0000_1000: acc <= alu_r;
+          8'b000?_1001: { c, acc } <= { alu_c, alu_r };
           8'b1001_????: // cla & li
             if (opc[7:4] != rdat[7:4]) // skip consecutive
               acc <= rdat[3:0];
@@ -439,8 +436,8 @@ always @(posedge clk)
           8'b0101_01??,
           8'b0010_01??,
           8'b0101_00??,
-          8'b0101_11??: if (alu_carry) state <= SKP;
-          8'b0010_00??: if (~alu_carry) state <= SKP;
+          8'b0101_11??: if (alu_c) state <= SKP;
+          8'b0010_00??: if (~alu_c) state <= SKP;
           8'b0100_110?,
           8'b0100_001?,
           8'b0100_101?,
@@ -458,11 +455,7 @@ always @(posedge clk)
           8'b0001_011?,
           8'b0001_1110,
           8'b0001_0100: state <= PRM;
-          8'b0001_0101:
-            if (opc == 8'b0001_0101) // skip consecutive??
-              state <= SKP;
-            else
-              state <= PRM;
+          8'b0001_0101: state <= PRM; // ldi
         endcase
       end
 
@@ -478,16 +471,20 @@ always @(posedge clk)
           8'b0100_1001, // rts
           8'b0100_1000: // rt
             case (sp)
-              2'b00: sp <= 2'b10;
-              2'b01: sp <= 2'b00;
-              2'b10: sp <= 2'b01;
-              2'b11: sp <= 2'b10;
+              2'd0: sp <= 2'd2;
+              2'd1: sp <= 2'd0;
+              2'd2: sp <= 2'b1;
             endcase
         endcase
       FTC:
         casez (rdat)
           8'b1011_????,
-          8'b1010_1???: sp <= sp + 2'b1;
+          8'b1010_1???:
+            case (sp)
+              2'd0: sp <= 2'd1;
+              2'd1: sp <= 2'd2;
+              2'd2: sp <= 2'd0;
+            endcase
         endcase
     endcase
     if (~_INT && ien && irq)
