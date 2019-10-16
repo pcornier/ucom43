@@ -1,0 +1,12 @@
+# DESCRIPTION: Verilator output: Timestamp data for --skip-identical.  Delete at will.
+C "-Wall --cc mcu.v --exe scramble.cpp -CFLAGS -I/usr/include/SDL2 -CFLAGS -g -LDFLAGS -lSDL2 -LDFLAGS -lSDL2_image"
+S   6443072  3420501  1568635460   661439304  1567649800           0 "/usr/bin/verilator_bin"
+S     14433  5374135  1571230720   485772351  1571230720   485772351 "mcu.v"
+T     81434  5375559  1571231817   425809406  1571231817   425809406 "obj_dir/Vmcu.cpp"
+T      4675  5375519  1571231817   421809406  1571231817   421809406 "obj_dir/Vmcu.h"
+T      1839  5375571  1571231817   425809406  1571231817   425809406 "obj_dir/Vmcu.mk"
+T       515  5375216  1571231817   421809406  1571231817   421809406 "obj_dir/Vmcu__Syms.cpp"
+T       740  5374645  1571231817   421809406  1571231817   421809406 "obj_dir/Vmcu__Syms.h"
+T       192  5375572  1571231817   425809406  1571231817   425809406 "obj_dir/Vmcu__ver.d"
+T         0        0  1571231817   425809406  1571231817   425809406 "obj_dir/Vmcu__verFiles.dat"
+T      1236  5375564  1571231817   425809406  1571231817   425809406 "obj_dir/Vmcu_classes.mk"

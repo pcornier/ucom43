@@ -305,29 +305,29 @@ int main(int argc, char** argv, char** env) {
   canvas = SDL_CreateRGBSurfaceWithFormat(0, 640, 200, 32, SDL_PIXELFORMAT_RGBA32);
 
   IMG_Init(IMG_INIT_PNG);
-  background = load_png("VFD/background.png");
-  images[0] = load_png("VFD/g0-0-2-4-6.png");
-  images[1] = load_png("VFD/g0-1-3-5-7.png");
-  images[2] = load_png("VFD/g0-8.png");
-  images[3] = load_png("VFD/g0-11-13-15.png");
-  images[4] = load_png("VFD/g0-9-12-14-16.png");
-  images[5] = load_png("VFD/g0-10.png");
+  background = load_png("VFD/scramble/background.png");
+  images[0] = load_png("VFD/scramble/g0-0-2-4-6.png");
+  images[1] = load_png("VFD/scramble/g0-1-3-5-7.png");
+  images[2] = load_png("VFD/scramble/g0-8.png");
+  images[3] = load_png("VFD/scramble/g0-11-13-15.png");
+  images[4] = load_png("VFD/scramble/g0-9-12-14-16.png");
+  images[5] = load_png("VFD/scramble/g0-10.png");
 
-  images[6] = load_png("VFD/g1-11-13-15.png");
-  images[7] = load_png("VFD/g1-8.png");
-  images[8] = load_png("VFD/g1-0-2-4-6.png");
-  images[9] = load_png("VFD/g1-9-12-14-16.png");
-  images[10] = load_png("VFD/g1-1-3-5-7.png");
-  images[11] = load_png("VFD/g1-10.png");
+  images[6] = load_png("VFD/scramble/g1-11-13-15.png");
+  images[7] = load_png("VFD/scramble/g1-8.png");
+  images[8] = load_png("VFD/scramble/g1-0-2-4-6.png");
+  images[9] = load_png("VFD/scramble/g1-9-12-14-16.png");
+  images[10] = load_png("VFD/scramble/g1-1-3-5-7.png");
+  images[11] = load_png("VFD/scramble/g1-10.png");
 
-  images[12] = load_png("VFD/g8-8.png");
-  images[13] = load_png("VFD/g8-9.png");
-  images[14] = load_png("VFD/g8-7.png");
-  images[15] = load_png("VFD/g8-0.png");
-  images[16] = load_png("VFD/g8-1-4.png");
-  images[17] = load_png("VFD/g8-2-5.png");
-  images[18] = load_png("VFD/g8-3.png");
-  images[19] = load_png("VFD/g8-6.png");
+  images[12] = load_png("VFD/scramble/g8-8.png");
+  images[13] = load_png("VFD/scramble/g8-9.png");
+  images[14] = load_png("VFD/scramble/g8-7.png");
+  images[15] = load_png("VFD/scramble/g8-0.png");
+  images[16] = load_png("VFD/scramble/g8-1-4.png");
+  images[17] = load_png("VFD/scramble/g8-2-5.png");
+  images[18] = load_png("VFD/scramble/g8-3.png");
+  images[19] = load_png("VFD/scramble/g8-6.png");
 
   images[20] = load_png("VFD/g9-7.png");
   images[21] = load_png("VFD/g9-8--16.png");
