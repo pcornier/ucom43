@@ -52,14 +52,14 @@ parameter
   SKP = 2'b10, // skip
   WRI = 2'b11; // write ram
 
-// divide the main clock by 2
-reg clk_cnt;
+// divide the main clock by 4
+reg [1:0] clk_cnt;
 always @(posedge clk)
-  clk_cnt <= clk_cnt + 1'b1;
+  clk_cnt <= clk_cnt + 2'b1;
 
-wire clk_en = clk_cnt == 1'b0;
+wire clk_en = clk_cnt == 2'b0;
 
-reg  [2:0]  pcf        ; // pc field
+reg  [2:0]  pcf        ; // pc field register
 reg  [7:0]  pcc        ; // pc counter
 reg  [2:0]  dph        ; // data pointer high
 reg  [3:0]  dpl        ; // data pointer low
@@ -91,16 +91,17 @@ always @(posedge clk)
 
 // timer
 always @(posedge clk) begin
-  if (opc == 8'b0001_0100) begin // stm cycle #2
+  if (clk_en && opc == 8'b0001_0100 && state == PRM) begin // stm cycle #2
     pcount <= 6'b0;
     bcount <= rdat[5:0];
     tm <= 1'b0;
   end
   else if (~tm) begin
-    if (pcount == 6'b111111)
+    if (pcount == 6'b111111) begin
+      if (bcount == 6'b0) tm <= 1'b1; // stop
       bcount <= bcount - 6'b1;
+    end
     pcount <= pcount + 6'b1;
-    if (bcount == 6'b0) tm <= 1'b1; // stop
   end
 end
 
@@ -140,8 +141,8 @@ wire       sel        ;
 assign sel = waddr < 7'h79 ? 1'b0 : 1'b1;
 assign daddr = waddr[6] == 1'b1 ? (waddr & 7'b1011111) : waddr;
 
-always @(negedge clk)
-  mdat <= dp < 7'h79 ? ram[dp[6] == 1'b1 ? dp & 7'b1011111 : dp] : wr[dp[2:0]];
+always @(posedge clk)
+  mdat <= dp < 7'h79 ? ram[dp[6] == 1'b1 ? dp & 7'b1011111 : dp] : wr[dp[2:0]-1];
 
 // write ram & registers
 always @(posedge clk)
@@ -158,7 +159,6 @@ always @(posedge clk)
         wr[daddr[2:0]-1][din[1:0]] <= bset[0];
       else
         wr[daddr[2:0]-1] <= din;
-
 
 // ALU
 reg [2:0] alu_op;
@@ -184,33 +184,33 @@ end
 // alu_a
 always @*
   casez (rdat)
-    8'b0001_11?1,
-    8'b0101_10??: alu_a = mdat;
-    8'b0001_0000,
-    8'b0000_11?1,
-    8'b000?_100?,
-    8'b0000_0110,
-    8'b0000_1010,
-    8'b0010_01??: alu_a = acc;
-    8'b0001_0001: alu_a = ~acc;
-    8'b001?_11??,
-    8'b00?1_0011: alu_a = dpl;
-    8'b0010_00??,
-    8'b0101_11??: alu_a = F;
-    8'b0101_00??: alu_a = i_ports[dpl[1:0]];
-    8'b0101_01??: alu_a = prtAI;
+    8'b0001_11?1, // inm dem
+    8'b0101_10??: alu_a = mdat; // tmb
+    8'b0001_0000, // cma
+    8'b0000_11?1, // inc dec
+    8'b000?_100?, // ad ads adc exl
+    8'b0000_0110, // daa
+    8'b0000_1010, // das
+    8'b0010_01??: alu_a = acc; // tab
+    8'b0001_0001: alu_a = ~acc; // cia
+    8'b001?_11??, // xmd xmi
+    8'b00?1_0011: alu_a = dpl; // ded ind
+    8'b0010_00??, // fbf
+    8'b0101_11??: alu_a = F; // fbt
+    8'b0101_00??: alu_a = i_ports[dpl[1:0]]; // tpb
+    8'b0101_01??: alu_a = prtAI; // tpa
     default: alu_a = 4'b0;
   endcase
 
 // alu_b
 always @*
   casez (rdat)
-    8'b0001_0000: alu_b = 4'hf;
-    8'b000?_100?: alu_b = mdat;
-    8'b0101_1???,
-    8'b0101_00??,
-    8'b0101_01??,
-    8'b0010_0???: alu_b = rdat[3:0];
+    8'b0001_0000: alu_b = 4'hf; // cma
+    8'b000?_100?: alu_b = mdat; // ad ads adc exl
+    8'b0101_1???, // tmb fbt
+    8'b0101_00??, // tpb
+    8'b0101_01??, // tpa
+    8'b0010_0???: alu_b = rdat[3:0]; // tab fbf
     default: alu_b = 4'b0;
   endcase
 
@@ -219,22 +219,22 @@ always @*
 // 4: xor, 5: bit, 6: daa, 7: das
 always @*
   casez (rdat)
-    8'b0000_1000: alu_op = 3'd0;
-    8'b000?_1001: alu_op = 3'd1;
-    8'b0011_11??,
-    8'b0011_0011,
-    8'b0001_0001,
-    8'b000?_1101: alu_op = 3'd2;
-    8'b0010_11??,
-    8'b0001_0011,
-    8'b000?_1111: alu_op = 3'd3;
-    8'b0001_?000: alu_op = 3'd4;
-    8'b0101_00??,
-    8'b0101_01??,
-    8'b0101_1???,
-    8'b0010_0???: alu_op = 3'd5;
-    8'b0000_0110: alu_op = 3'd6;
-    8'b0000_1010: alu_op = 3'd7;
+    8'b0000_1000: alu_op = 3'd0; // ad
+    8'b000?_1001: alu_op = 3'd1; // ads adc
+    8'b0011_11??, // xmi
+    8'b0011_0011, // ind
+    8'b0001_0001, // cia
+    8'b000?_1101: alu_op = 3'd2; // inm
+    8'b0010_11??, // xmd
+    8'b0001_0011, // ded
+    8'b000?_1111: alu_op = 3'd3; // dec dem
+    8'b0001_?000: alu_op = 3'd4; // cma exl
+    8'b0101_00??, // tpb
+    8'b0101_01??, // tpa
+    8'b0101_1???, // tmb fbt
+    8'b0010_0???: alu_op = 3'd5; // tab fbf
+    8'b0000_0110: alu_op = 3'd6; // daa
+    8'b0000_1010: alu_op = 3'd7; // das
     default: alu_op = 3'd0;
   endcase
 
@@ -243,13 +243,13 @@ always @(posedge clk)
   if (clk_en)
     if (state == FTC)
       casez (rdat)
-        8'b011?_11??: waddr <= F_REG;
-        8'b0100_1101: waddr <= R_REG;
-        8'b0100_1100: waddr <= S_REG;
-        8'b0100_?011: waddr <= W_REG;
-        8'b0100_?111: waddr <= X_REG;
-        8'b0100_?110: waddr <= Y_REG;
-        8'b0100_?010: waddr <= Z_REG;
+        8'b011?_11??: waddr <= F_REG; // sfb rfb
+        8'b0100_?010: waddr <= Z_REG; // xaz taz
+        8'b0100_?011: waddr <= W_REG; // xaw taw
+        8'b0100_1100: waddr <= S_REG; // xls
+        8'b0100_1101: waddr <= R_REG; // xhr
+        8'b0100_?110: waddr <= Y_REG; // xly tly
+        8'b0100_?111: waddr <= X_REG; // xhx thx
         default: waddr <= dp;
       endcase
 
@@ -261,13 +261,13 @@ always @(posedge clk) begin
     case (state)
       FTC:
         casez (rdat)
-          8'b0001_11?1,
-          8'b0000_0010,
-          8'b0010_1???,
-          8'b0011_11??,
-          8'b0100_??1?,
-          8'b0100_110?,
-          8'b011?_1???: we <= 1'b0;
+          8'b0001_11?1, // inm dem
+          8'b0000_0010, // s
+          8'b0010_1???, // xm xmd
+          8'b0011_11??, // xmi
+          8'b0100_??1?, // 8 T&X (ZWYX)
+          8'b0100_110?, // xhr xls
+          8'b011?_1???: we <= 1'b0; // smb rmb sfb rfb
           default: we <= 1'b1;
         endcase
     endcase
@@ -277,30 +277,32 @@ end
 // ram din
 always @(posedge clk)
   if (clk_en)
-    casez	(rdat)
-      8'b0001_1101,
-      8'b0001_1111: din <= alu_r;
-      8'b0000_0010,
-      8'b0010_10??,
-      8'b001?_11??,
-      8'b0100_101?,
-      8'b0100_001?: din <= acc;
-      8'b0100_?111,
-      8'b0100_1101: din <= { 1'b0, dph };
-      8'b0100_?110,
-      8'b0100_1100: din <= dpl;
-      8'b011?_1???: din <= { 2'b0, rdat[1:0] };
-      default: din <= 4'b0;
-    endcase
+    if (state == FTC)
+      casez	(rdat)
+        8'b0001_1101, // inm
+        8'b0001_1111: din <= alu_r; // dem
+        8'b0000_0010, // s
+        8'b0010_10??, // xm
+        8'b001?_11??, // xmi xmd
+        8'b0100_101?, // xaz xaw
+        8'b0100_001?: din <= acc; // taz taw
+        8'b0100_?111, // xhx thx
+        8'b0100_1101: din <= { 1'b0, dph }; // xhr
+        8'b0100_?110, // xly tly
+        8'b0100_1100: din <= dpl; // xls
+        8'b011?_1???: din <= { 2'b0, rdat[1:0] }; // smb rmb sfb rfb
+        default: din <= 4'b0;
+      endcase
 
 // bit set
 always @(posedge clk)
   if (clk_en)
-    casez (rdat)
-      8'b0111_1???: bset <= 2'b11;
-      8'b0110_1???: bset <= 2'b10;
-      default: bset <= 2'b00;
-    endcase
+    if (state == FTC)
+      casez (rdat)
+        8'b0111_1???: bset <= 2'b11; // smb sfb
+        8'b0110_1???: bset <= 2'b10; // rmb rfb
+        default: bset <= 2'b00;
+      endcase
 
 // dph
 always @(posedge clk)
@@ -311,10 +313,10 @@ always @(posedge clk)
           dph <= rdat[6:4];
       FTC:
         casez (rdat)
-          8'b001?_1???: dph[1:0] <= dph[1:0] ^ rdat[1:0];
-          8'b1000_????: dph <= 0;
-          8'b0100_1111: dph <= X[2:0];
-          8'b0100_1101: dph <= R[2:0];
+          8'b001?_1???: dph[1:0] <= dph[1:0] ^ rdat[1:0]; // l lm x xm xd xmd xi xmi
+          8'b1000_????: dph <= 0; // ldz
+          8'b0100_1111: dph <= X[2:0]; // xhx
+          8'b0100_1101: dph <= R[2:0]; // xhr
         endcase
     endcase
 
@@ -327,12 +329,12 @@ always @(posedge clk)
           dpl <= rdat[3:0];
       FTC:
         casez (rdat)
-          8'b001?_11??,
-          8'b00?1_0011: dpl <= alu_r;
-          8'b1000_????: dpl <= rdat[3:0];
-          8'b0100_1110: dpl <= Y;
-          8'b0000_0111: dpl <= acc;
-          8'b0100_1100: dpl <= S;
+          8'b001?_11??, // xd xmd xi xmi
+          8'b00?1_0011: dpl <= alu_r; // ded ind
+          8'b1000_????: dpl <= rdat[3:0]; // ldz
+          8'b0100_1110: dpl <= Y; // xly
+          8'b0000_0111: dpl <= acc; // tal
+          8'b0100_1100: dpl <= S; // xls
         endcase
     endcase
 
@@ -343,29 +345,29 @@ always @(posedge clk)
     case (state)
       FTC:
         casez (rdat)
-          8'b0000_1011: c <= 0;
-          8'b0001_0000,
-          8'b0001_0001,
-          8'b0000_11?1,
-          8'b0000_0110,
-          8'b0000_1010,
-          8'b0001_1000: acc <= alu_r;
-          8'b0001_1011: c <= 1;
-          8'b0001_1010: { c, cs } <= { cs, c };
-          8'b0011_0000: { acc, c } <= { c, acc };
-          8'b0000_1000: acc <= alu_r;
-          8'b000?_1001: { c, acc } <= { alu_c, alu_r };
+          8'b0000_1011: c <= 0; // clc
+          8'b0001_1011: c <= 1; // stc
+          8'b0001_0000, // cma
+          8'b0001_0001, // cia
+          8'b0000_11?1, // inc dec
+          8'b0000_0110, // daa
+          8'b0000_1010, // das
+          8'b0000_1000, // ad
+          8'b0001_1000: acc <= alu_r; // exl
+          8'b0001_1010: { c, cs } <= { cs, c }; // xc
+          8'b0011_0000: { acc, c } <= { c, acc }; // rar
+          8'b000?_1001: { c, acc } <= { alu_c, alu_r }; // ads adc
           8'b1001_????: // cla & li
             if (opc[7:4] != rdat[7:4]) // skip consecutive
               acc <= rdat[3:0];
-          8'b0011_10??,
-          8'b0010_10??,
-          8'b0010_11??,
-          8'b0011_11??: acc <= mdat;
-          8'b0001_0010: acc <= dpl;
-          8'b0100_1010: acc <= Z;
-          8'b0100_1011: acc <= W;
-          8'b0100_0000: acc <= prtAI;
+          8'b0011_10??, // l lm
+          8'b0010_10??, // x xm
+          8'b0010_11??, // xd xmd
+          8'b0011_11??: acc <= mdat; // xi xmi
+          8'b0001_0010: acc <= dpl; // tla
+          8'b0100_1010: acc <= Z; // xaz
+          8'b0100_1011: acc <= W; // xaw
+          8'b0100_0000: acc <= prtAI; // ia
           8'b0011_0010: // ip
             if (dpl[3:2] == 2'b0)
               acc <= i_ports[dpl[1:0]];
@@ -380,8 +382,8 @@ always @(posedge clk)
     case (state)
       FTC:
         casez (rdat)
-          8'b1011_????: stack[sp] <= pc + 11'd1;
-          8'b1010_1???: stack[sp] <= pc + 11'd2;
+          8'b1011_????: stack[sp] <= pc + 11'd1; // czp
+          8'b1010_1???: stack[sp] <= pc + 11'd2; // cal
         endcase
     endcase
     if (~_INT && ien && irq)
@@ -397,18 +399,12 @@ always @(posedge clk)
       { o_ports[PORT_C], o_ports[PORT_D] } <= rdat;
     else if (state == FTC)
       casez (rdat)
-        8'b0111_01??: // seb
-          o_ports[PORT_E][rdat[1:0]] <= 1'b1;
-        8'b0110_01??: // reb
-          o_ports[PORT_E][rdat[1:0]] <= 1'b0;
-        8'b0111_00??: // spb
-          o_ports[dpl][rdat[1:0]] <= 1'b1;
-        8'b0110_00??: // rpb
-          o_ports[dpl][rdat[1:0]] <= 1'b0;
-        8'b0100_0100: // oe
-          o_ports[PORT_E] <= acc;
-        8'b0000_1110: // op
-          o_ports[dpl] <= acc;
+        8'b0111_01??: o_ports[PORT_E][rdat[1:0]] <= 1'b1; // seb
+        8'b0110_01??: o_ports[PORT_E][rdat[1:0]] <= 1'b0; // reb
+        8'b0111_00??: o_ports[dpl][rdat[1:0]] <= 1'b1; // spb
+        8'b0110_00??: o_ports[dpl][rdat[1:0]] <= 1'b0; // rpb
+        8'b0100_0100: o_ports[PORT_E] <= acc; // oe
+        8'b0000_1110: o_ports[dpl] <= acc; // op
       endcase
 
 // FSM
@@ -419,42 +415,42 @@ always @(posedge clk)
 
       PRM: begin
         casez (opc)
-          8'b0001_0111: if (acc == rdat[3:0]) state <= SKP;
-          8'b0001_0110: if (dpl == rdat[3:0]) state <= SKP;
-          8'b0100_100?: if (opc[0]) state <= SKP;
+          8'b0001_0111: if (acc == rdat[3:0]) state <= SKP; // ci
+          8'b0001_0110: if (dpl == rdat[3:0]) state <= SKP; // cli
+          8'b0100_1001: state <= SKP; // rts
         endcase
       end
 
       FTC: begin
         casez (rdat)
-          8'b0000_11?1,
-          8'b0001_11?1,
-          8'b0000_100?,
-          8'b00?1_0011,
-          8'b001?_11??,
-          8'b0101_10??,
-          8'b0101_01??,
-          8'b0010_01??,
-          8'b0101_00??,
-          8'b0101_11??: if (alu_c) state <= SKP;
-          8'b0010_00??: if (~alu_c) state <= SKP;
-          8'b0100_110?,
-          8'b0100_001?,
-          8'b0100_101?,
-          8'b0100_011?,
-          8'b0100_111?: state <= WRI;
-          8'b0011_01??: if (mdat[rdat[1:0]] == acc[rdat[1:0]]) state <= SKP;
-          8'b0000_1100: if (acc == mdat) state <= SKP;
-          8'b0000_0100: if (c) state <= SKP;
-          8'b0000_0101: if (tm) state <= SKP;
-          8'b0000_0011: if (irq) state <= SKP;
-          8'b1010_1???,
-          8'b0100_100?,
-          8'b0100_0001,
-          8'b1010_0???,
-          8'b0001_011?,
-          8'b0001_1110,
-          8'b0001_0100: state <= PRM;
+          8'b0000_11?1, // inc dec
+          8'b0001_11?1, // inm dem
+          8'b0000_100?, // ad ads
+          8'b00?1_0011, // ded ind
+          8'b001?_11??, // xd xmd xi xmi
+          8'b0101_10??, // tmb
+          8'b0101_01??, // tpa
+          8'b0010_01??, // tab
+          8'b0101_00??, // tpb
+          8'b0101_11??: if (alu_c) state <= SKP; // fbt
+          8'b0010_00??: if (~alu_c) state <= SKP; // fbf
+          8'b0100_110?, // xls xhr
+          8'b0100_001?, // taz taw
+          8'b0100_101?, // xaz xaw
+          8'b0100_011?, // thx tly
+          8'b0100_111?: state <= WRI; // xhx xly
+          8'b0011_01??: if (mdat[rdat[1:0]] == acc[rdat[1:0]]) state <= SKP; // cmb
+          8'b0000_1100: if (acc == mdat) state <= SKP; // cm
+          8'b0000_0100: if (c) state <= SKP; // tc
+          8'b0000_0101: if (tm) state <= SKP; // ttm
+          8'b0000_0011: if (irq) state <= SKP; // tit
+          8'b1010_1???, // cal
+          8'b0100_100?, // rt rts
+          8'b0100_0001, // jpa
+          8'b1010_0???, // jmp
+          8'b0001_011?, // ci cli
+          8'b0001_1110, // ocd
+          8'b0001_0100, // stm
           8'b0001_0101: state <= PRM; // ldi
         endcase
       end
@@ -478,8 +474,8 @@ always @(posedge clk)
         endcase
       FTC:
         casez (rdat)
-          8'b1011_????,
-          8'b1010_1???:
+          8'b1011_????, // czp
+          8'b1010_1???: // cal
             case (sp)
               2'd0: sp <= 2'd1;
               2'd1: sp <= 2'd2;
@@ -523,29 +519,29 @@ always @(posedge clk)
     case (state)
       PRM:
         casez (opc)
-          8'b0100_1001,
-          8'b0100_1000: { pcf, pcc } <= stack[sp-1];
-          8'b1010_1???,
-          8'b1010_0???: { pcf, pcc } <= { opc[2:0], rdat };
-          8'b0100_0001: pcc[5:0] <= { acc, 2'b00 };
+          8'b0100_1001, // rts
+          8'b0100_1000: { pcf, pcc } <= stack[sp == 2'b0 ? 2'b10 : sp-1]; // rt
+          8'b1010_1???, // cal
+          8'b1010_0???: { pcf, pcc } <= { opc[2:0], rdat }; // jmp
+          8'b0100_0001: pcc[5:0] <= { acc, 2'b0 }; // jpa
         endcase
       SKP:
         casez (rdat)
-          8'b0001_01?1,
-          8'b0001_?110,
-          8'b1010_0???,
-          8'b1010_1???,
-          8'b0001_0100: pcc <= pcc + 8'd2;
+          8'b0001_01?1, // ldi ci
+          8'b0001_?110, // cli ocd
+          8'b1010_????, // jmp cal
+          8'b0001_0100: pcc <= pcc + 8'd2; // stm
           default: pcc <= pcc + 8'd1;
         endcase
       FTC:
         casez (rdat)
-          8'b0100_?01?,
-          8'b0100_011?,
-          8'b0100_100?,
-          8'b0100_11??: pcc <= pcc; // do not increment
-          8'b11??_????: pcc[5:0] <= rdat[5:0];
-          8'b1011_????: { pcf, pcc } <= { 5'b0, rdat[3:0], 2'b0};
+          8'b0100_?01?, // xaz xaw taz taw
+          8'b0100_011?, // thx tly
+          8'b0100_11??, // xhx xly xhr xls
+          8'b0100_100?: // rt rts
+            pcc <= pcc; // do not increment
+          8'b11??_????: pcc[5:0] <= rdat[5:0]; // jcp
+          8'b1011_????: { pcf, pcc } <= { 5'b0, rdat[3:0], 2'b0}; // czp
         endcase
     endcase
 
