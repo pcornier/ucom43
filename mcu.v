@@ -396,7 +396,7 @@ always @(posedge clk)
   if (clk_en)
     if (state == PRM && opc == 8'b0001_1110) // ocd
       // what is correct, C,D ← I or D,C ← I ??
-      { o_ports[PORT_C], o_ports[PORT_D] } <= rdat;
+      { o_ports[PORT_D], o_ports[PORT_C] } <= rdat;
     else if (state == FTC)
       casez (rdat)
         8'b0111_01??: o_ports[PORT_E][rdat[1:0]] <= 1'b1; // seb

@@ -383,7 +383,7 @@ int main(int argc, char** argv, char** env) {
       prtH = mcu->prtH;
       prtI = mcu->prtI;
 
-      int grids = ((mcu->prtI & 0b11) << 8) | ((mcu->prtC & 0b1111) << 4) | (mcu->prtD & 0b1111);
+      int grids = ((mcu->prtI & 0b11) << 8) | ((mcu->prtD & 0b1111) << 4) | (mcu->prtC & 0b1111);
 
       for (int g = 9; g >= 0; g--) {
         int grid_bit = grids & (1 << g);

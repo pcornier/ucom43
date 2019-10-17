@@ -7,7 +7,7 @@ I was able to synthesize it on a Spartan-6 board without too much trouble: the c
 
 ![Preview](./preview.apng)
 
-About the ALU, I'm still not sure how it is possible to increment a 4-bit register while the ALU is XORing the two lower bits of DPH. I think there is an independant XOR circuitry for DPH only. I also had problems to figure out what is the correct port order for the OCD instruction. In the official documentation (`uCOM-43_SINGLE_CHIP_MICROCOMPUTER_USERS_MANUAL.pdf`), the C port contains the 4 upper bits: C,D ← I7...I0, but I had to reverse the VFD connections to make it work properly with Tomy Scramble.
+About the ALU, I'm still not sure how it is possible to increment a 4-bit register while the ALU is XORing the two lower bits of DPH. I think there is an independant XOR circuitry for DPH only.
 
 
 License (Beerware)
