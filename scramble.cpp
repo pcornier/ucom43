@@ -20,7 +20,6 @@ SDL_Surface* canvas;
 SDL_Surface* background;
 SDL_Surface* images[22];
 
-float state = 0;
 float freq = 0;
 const int rate = 96000;
 Sint16 sbuf[4096];
@@ -349,14 +348,14 @@ int main(int argc, char** argv, char** env) {
   images[18] = load_png("VFD/scramble/g8-3.png");
   images[19] = load_png("VFD/scramble/g8-6.png");
 
-  images[20] = load_png("VFD/g9-7.png");
-  images[21] = load_png("VFD/g9-8--16.png");
+  images[20] = load_png("VFD/scramble/g9-7.png");
+  images[21] = load_png("VFD/scramble/g9-8--16.png");
 
   SDL_AudioSpec spec;
   spec.freq = rate;
   spec.format = AUDIO_S16SYS;
   spec.channels = 1;
-  spec.samples = 4096;
+  spec.samples = 2048;
   spec.callback = audio_callback;
   spec.userdata = nullptr;
   SDL_AudioSpec obtainedSpec;
@@ -413,7 +412,7 @@ int main(int argc, char** argv, char** env) {
       prtH = mcu->prtH;
       prtI = mcu->prtI;
 
-      int grids = ((mcu->prtI & 0b11) << 8) | ((mcu->prtD & 0b1111) << 4) | (mcu->prtC & 0b1111);
+      int grids = ((prtI & 0b11) << 8) | ((prtD & 0b1111) << 4) | (prtC & 0b1111);
 
       for (int g = 9; g >= 0; g--) {
         int grid_bit = grids & (1 << g);
