@@ -480,7 +480,6 @@ int main(int argc, char** argv, char** env) {
       prtH = mcu->prtH;
       prtI = mcu->prtI;
 
-      // int grids = 0b1111111111;
       int grids =
         (prtC & 0b0001 ? 0b1000000000 : 0) |
         (prtC & 0b0010 ? 0b0100000000 : 0) |
@@ -496,25 +495,6 @@ int main(int argc, char** argv, char** env) {
       for (int g = 9; g >= 0; g--) {
         int grid_bit = grids & (1 << g);
         if (grid_bit != 0) {
-
-          // set_plate(g,  8, 1);
-          // set_plate(g, 11, 1);
-          // set_plate(g, 13, 1);
-          // set_plate(g, 14, 1);
-
-          // set_plate(g,  9,  1);
-          // set_plate(g, 10,  1);
-          // set_plate(g, 12,  1);
-          // set_plate(g,  5,  1);
-
-          // set_plate(g,  1,  1);
-          // set_plate(g,  0,  1);
-          // set_plate(g,  6,  1);
-          // set_plate(g,  7,  1);
-
-          // set_plate(g,  4,  1);
-          // set_plate(g,  2,  1);
-          // set_plate(g,  3,  1);
 
           set_plate(g,  8, prtF & 0b0001);
           set_plate(g, 11, prtF & 0b0010);

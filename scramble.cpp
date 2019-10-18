@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL2/SDL_audio.h>
+#include <iostream>
+#include <cmath>
 
 #include "Vmcu.h"
 #include "verilated.h"
@@ -16,6 +19,12 @@ SDL_Surface* screen;
 SDL_Surface* canvas;
 SDL_Surface* background;
 SDL_Surface* images[22];
+
+float state = 0;
+float freq = 0;
+const int rate = 96000;
+Sint16 sbuf[4096];
+int sbuf_i = 0;
 
 Vmcu* mcu;
 
@@ -291,6 +300,17 @@ SDL_Surface* load_png(const char* path) {
   return surf;
 }
 
+
+void audio_callback(void *userdata, Uint8 *_stream, int len) {
+  Sint16 *stream = (Sint16*) _stream;
+  len /= 2;
+  for (int i = 0; i < len; ++i) {
+    stream[i] = sbuf[i];
+  }
+  sbuf_i = 0;
+}
+
+
 int main(int argc, char** argv, char** env) {
 
   window = SDL_CreateWindow(
@@ -332,8 +352,18 @@ int main(int argc, char** argv, char** env) {
   images[20] = load_png("VFD/g9-7.png");
   images[21] = load_png("VFD/g9-8--16.png");
 
-  Verilated::commandArgs(argc, argv);
+  SDL_AudioSpec spec;
+  spec.freq = rate;
+  spec.format = AUDIO_S16SYS;
+  spec.channels = 1;
+  spec.samples = 4096;
+  spec.callback = audio_callback;
+  spec.userdata = nullptr;
+  SDL_AudioSpec obtainedSpec;
+  SDL_OpenAudio(&spec, &obtainedSpec);
+  SDL_PauseAudio(0);
 
+  Verilated::commandArgs(argc, argv);
   mcu = new Vmcu;
 
   #if VM_TRACE			// If verilator was invoked with --trace
@@ -428,6 +458,11 @@ int main(int argc, char** argv, char** env) {
 
     mcu->clk = !mcu->clk;
     if (mcu->clk) cycles++;
+
+    if (mcu->clk) {
+      sbuf[sbuf_i] = mcu->prtI & 0b100 ? ((1<<15)-1) : 0;
+      sbuf_i++;
+    }
 
   }
 
