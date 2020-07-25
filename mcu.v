@@ -18,6 +18,7 @@ module mcu(
   output [3:0] prtG,
   output [3:0] prtH,
   output [2:0] prtI
+
 );
 
 // input ports
@@ -52,12 +53,11 @@ parameter
   SKP = 2'b10, // skip
   WRI = 2'b11; // write ram
 
-// divide the main clock by 4
 reg [1:0] clk_cnt;
 always @(posedge clk)
   clk_cnt <= clk_cnt + 2'b1;
 
-wire clk_en = clk_cnt == 2'b0;
+wire clk_mcu = clk_cnt == 2'b0;
 
 reg  [2:0]  pcf        ; // pc field register
 reg  [7:0]  pcc        ; // pc counter
@@ -77,6 +77,7 @@ reg         irq        ; // interrupt request
 reg         ien        ; // interrupt enable
 wire [6:0]  dp         ; // data pointer
 wire [10:0] pc         ; // pc
+reg  [3:0]  mask       ; // bit mask
 
 assign dp = { dph, dpl };
 assign pc = { pcf, pcc };
@@ -85,23 +86,24 @@ assign pc = { pcf, pcc };
 reg [7:0] rom[2047:0];
 initial $readmemh("obj_dir/rom.txt", rom); // <= ROM file here
 
-// sync for bram support
 always @(posedge clk)
   rdat <= rom[pc];
 
 // timer
 always @(posedge clk) begin
-  if (clk_en && opc == 8'b0001_0100 && state == PRM) begin // stm cycle #2
-    pcount <= 6'b0;
-    bcount <= rdat[5:0];
-    tm <= 1'b0;
-  end
-  else if (~tm) begin
-    if (pcount == 6'b111111) begin
-      if (bcount == 6'b0) tm <= 1'b1; // stop
-      bcount <= bcount - 6'b1;
-    end
-    pcount <= pcount + 6'b1;
+  if (clk_mcu) begin
+	  if (opc == 8'b0001_0100 && state == PRM) begin // stm cycle #2
+      pcount <= 6'b0;
+      bcount <= rdat[5:0];
+      tm <= 1'b0;
+	  end
+	  else if (~tm) begin
+      if (pcount == 6'b111111) begin
+        if (bcount == 6'b0) tm <= 1'b1; // stop
+        bcount <= bcount - 6'b1;
+      end
+      pcount <= pcount + 6'b1;
+	  end
   end
 end
 
@@ -133,7 +135,6 @@ reg  [3:0] mdat       ; // memory data
 reg  [3:0] din        ; // ram data in
 reg  [6:0] waddr      ; // ram write address
 reg        we         ; // write enable, active low
-reg  [1:0] bset       ; // bit set 1x:enabled, x1:set x0:unset
 wire [6:0] daddr      ; // decoded ram write address
 wire       sel        ;
 
@@ -146,19 +147,10 @@ always @(posedge clk)
 
 // write ram & registers
 always @(posedge clk)
-  if (~we)
-    if (~sel)
-      // write to ram
-      if (bset[1])
-        ram[daddr][din[1:0]] <= bset[0];
-      else
-        ram[daddr] <= din;
-    else
-      // write to registers
-      if (bset[1])
-        wr[daddr[2:0]-1][din[1:0]] <= bset[0];
-      else
-        wr[daddr[2:0]-1] <= din;
+  if (~we) begin
+    if (~sel) ram[daddr] <= din;
+    else wr[daddr[2:0]-1] <= din;
+  end
 
 // ALU
 reg [2:0] alu_op;
@@ -175,7 +167,7 @@ always @* begin
     2: { alu_c, alu_r } = alu_a + 4'b1;
     3: { alu_c, alu_r } = alu_a - 4'b1;
     4: alu_r = alu_a ^ alu_b;
-    5: alu_c = alu_a[alu_b[1:0]];
+    5: alu_c = (alu_a & mask) != 0 ? 1'b1 : 1'b0;
     6: alu_r = alu_a + 4'd6;
     7: alu_r = alu_a + 4'd10;
   endcase
@@ -207,10 +199,6 @@ always @*
   casez (rdat)
     8'b0001_0000: alu_b = 4'hf; // cma
     8'b000?_100?: alu_b = mdat; // ad ads adc exl
-    8'b0101_1???, // tmb fbt
-    8'b0101_00??, // tpb
-    8'b0101_01??, // tpa
-    8'b0010_0???: alu_b = rdat[3:0]; // tab fbf
     default: alu_b = 4'b0;
   endcase
 
@@ -240,7 +228,7 @@ always @*
 
 // ram write address
 always @(posedge clk)
-  if (clk_en)
+  if (clk_mcu)
     if (state == FTC)
       casez (rdat)
         8'b011?_11??: waddr <= F_REG; // sfb rfb
@@ -257,26 +245,25 @@ always @(posedge clk)
 // ram we
 always @(posedge clk) begin
   we <= 1'b1;
-  if (clk_en)
+  if (clk_mcu)
     case (state)
       FTC:
-        casez (rdat)
-          8'b0001_11?1, // inm dem
-          8'b0000_0010, // s
-          8'b0010_1???, // xm xmd
-          8'b0011_11??, // xmi
-          8'b0100_??1?, // 8 T&X (ZWYX)
-          8'b0100_110?, // xhr xls
-          8'b011?_1???: we <= 1'b0; // smb rmb sfb rfb
-          default: we <= 1'b1;
-        endcase
+      casez (rdat)
+        8'b0001_11?1, // inm dem
+        8'b0000_0010, // s
+        8'b0010_1???, // xm xmd
+        8'b0011_11??, // xmi
+        8'b0100_??1?, // 8 T&X (ZWYX)
+        8'b0100_110?, // xhr xls
+        8'b011?_1???: we <= 1'b0; // smb rmb sfb rfb
+        default: we <= 1'b1;
+      endcase
     endcase
 end
 
-
 // ram din
 always @(posedge clk)
-  if (clk_en)
+  if (clk_mcu)
     if (state == FTC)
       casez	(rdat)
         8'b0001_1101, // inm
@@ -290,23 +277,16 @@ always @(posedge clk)
         8'b0100_1101: din <= { 1'b0, dph }; // xhr
         8'b0100_?110, // xly tly
         8'b0100_1100: din <= dpl; // xls
-        8'b011?_1???: din <= { 2'b0, rdat[1:0] }; // smb rmb sfb rfb
+        8'b0111_10??: din <= mdat | mask; // smb
+        8'b0111_11??: din <= F | mask; // sfb
+        8'b0110_10??: din <= mdat & ~mask; // rmb
+        8'b0110_11??: din <= F & ~mask; // rfb
         default: din <= 4'b0;
-      endcase
-
-// bit set
-always @(posedge clk)
-  if (clk_en)
-    if (state == FTC)
-      casez (rdat)
-        8'b0111_1???: bset <= 2'b11; // smb sfb
-        8'b0110_1???: bset <= 2'b10; // rmb rfb
-        default: bset <= 2'b00;
       endcase
 
 // dph
 always @(posedge clk)
-  if (clk_en)
+  if (clk_mcu)
     case (state)
       PRM:
         if (opc == 8'b0001_0101) // ldi
@@ -322,7 +302,7 @@ always @(posedge clk)
 
 // dpl
 always @(posedge clk)
-  if (clk_en)
+  if (clk_mcu)
     case (state)
       PRM:
         if (opc == 8'b0001_0101) // ldi
@@ -338,10 +318,9 @@ always @(posedge clk)
         endcase
     endcase
 
-
 // accumulator, carry & carry save
 always @(posedge clk)
-  if (clk_en)
+  if (clk_mcu)
     case (state)
       FTC:
         casez (rdat)
@@ -378,7 +357,7 @@ always @(posedge clk)
 
 // stack
 always @(posedge clk)
-  if (clk_en) begin
+  if (clk_mcu) begin
     case (state)
       FTC:
         casez (rdat)
@@ -386,30 +365,36 @@ always @(posedge clk)
           8'b1010_1???: stack[sp] <= pc + 11'd2; // cal
         endcase
     endcase
-    if (~_INT && ien && irq)
-      stack[sp] <= pc + 11'b1;
+    if (~_INT && ien && irq) stack[sp] <= pc + 11'b1;
   end
 
+always @*
+  case (rdat[1:0])
+    2'd0: mask = 4'b0001;
+    2'd1: mask = 4'b0010;
+    2'd2: mask = 4'b0100;
+    2'd3: mask = 4'b1000;
+  endcase
 
 // ports
 always @(posedge clk)
-  if (clk_en)
+  if (clk_mcu)
     if (state == PRM && opc == 8'b0001_1110) // ocd
-      { o_ports[PORT_D], o_ports[PORT_C] } <= rdat;
+     { o_ports[PORT_D], o_ports[PORT_C] } <= rdat;
     else if (state == FTC)
-      casez (rdat)
-        8'b0111_01??: o_ports[PORT_E][rdat[1:0]] <= 1'b1; // seb
-        8'b0110_01??: o_ports[PORT_E][rdat[1:0]] <= 1'b0; // reb
-        8'b0111_00??: o_ports[dpl][rdat[1:0]] <= 1'b1; // spb
-        8'b0110_00??: o_ports[dpl][rdat[1:0]] <= 1'b0; // rpb
-        8'b0100_0100: o_ports[PORT_E] <= acc; // oe
-        8'b0000_1110: o_ports[dpl] <= acc; // op
-      endcase
+     casez (rdat)
+      8'b0111_01??: o_ports[PORT_E] <= o_ports[PORT_E] | mask; // seb
+      8'b0110_01??: o_ports[PORT_E] <= o_ports[PORT_E] & ~mask; // reb
+      8'b0111_00??: o_ports[dpl] <= o_ports[dpl] | mask; // spb
+      8'b0110_00??: o_ports[dpl] <= o_ports[dpl] & ~mask; // rpb
+      8'b0100_0100: o_ports[PORT_E] <= acc; // oe
+      8'b0000_1110: o_ports[dpl] <= acc; // op
+     endcase
 
 // FSM
 always @(posedge clk)
-  if (clk_en) begin
-    state <= FTC; // <= most are one clk instructions
+  if (clk_mcu) begin
+    state <= FTC;
     case (state)
 
       PRM: begin
@@ -438,7 +423,7 @@ always @(posedge clk)
           8'b0100_101?, // xaz xaw
           8'b0100_011?, // thx tly
           8'b0100_111?: state <= WRI; // xhx xly
-          8'b0011_01??: if (mdat[rdat[1:0]] == acc[rdat[1:0]]) state <= SKP; // cmb
+          8'b0011_01??: if ((mdat & mask) == (acc & mask)) state <= SKP;
           8'b0000_1100: if (acc == mdat) state <= SKP; // cm
           8'b0000_0100: if (c) state <= SKP; // tc
           8'b0000_0101: if (tm) state <= SKP; // ttm
@@ -459,7 +444,7 @@ always @(posedge clk)
 
 // stack pointer
 always @(posedge clk)
-  if (clk_en) begin
+  if (clk_mcu) begin
     case (state)
       PRM:
         case (opc)
@@ -482,24 +467,22 @@ always @(posedge clk)
             endcase
         endcase
     endcase
-    if (~_INT && ien && irq)
-      sp <= sp + 2'b1;
+    if (~_INT && ien && irq) sp <= sp + 2'b1;
   end
 
 // opc
 always @(posedge clk)
-  if (clk_en)
-    if (state == FTC)
-      opc <= rdat;
+  if (clk_mcu)
+    if (state == FTC) opc <= rdat;
 
 // ien
 always @(posedge clk)
-  if (clk_en)
+  if (clk_mcu)
     if (state == FTC)
-      case (rdat)
-        8'b0011_0001: ien <= 1'b1;
-        8'b0000_0001: ien <= 1'b0;
-      endcase
+     case (rdat)
+      8'b0011_0001: ien <= 1'b1;
+      8'b0000_0001: ien <= 1'b0;
+     endcase
 
 // irq
 always @(posedge clk) begin
@@ -508,10 +491,9 @@ always @(posedge clk) begin
   if (state == FTC && rdat == 8'b0000_0011) irq <= 1'b0;
 end
 
-
 // pc
 always @(posedge clk)
-  if (clk_en && ~reset) begin
+  if (clk_mcu && ~reset) begin
 
     pcc <= pcc + 8'd1;
 
@@ -548,7 +530,6 @@ always @(posedge clk)
 
   end
 
-  else if (reset)
-    { pcf, pcc } <= 11'b0;
+  else if (reset) { pcf, pcc } <= 11'b0;
 
 endmodule
